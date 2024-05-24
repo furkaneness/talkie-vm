@@ -54,17 +54,21 @@ def add_friend():
     friend_email = request.form.get('email')
     friend = User.query.filter_by(email=friend_email).first()
     if friend:
-        new_friend_request = FriendRequest(sender_id=current_user.id, receiver_id=friend.id, status='pending')
-        db.session.add(new_friend_request)
-        db.session.commit()
+        existing_friend = Friend.query.filter_by(user_id=current_user.id, friend_id=friend.id).first()
+        if existing_friend:
+            flash('You are already friends with this user.', 'info')
+        else:
+            new_friend_request = FriendRequest(sender_id=current_user.id, receiver_id=friend.id, status='pending')
+            db.session.add(new_friend_request)
+            db.session.commit()
 
-        notification = Notification(user_id=friend.id, message=f"{current_user.username} sent you a friend request.", friend_request_id=new_friend_request.id)
-        db.session.add(notification)
-        db.session.commit()
+            notification = Notification(user_id=friend.id, message=f"{current_user.username} sent you a friend request.", friend_request_id=new_friend_request.id)
+            db.session.add(notification)
+            db.session.commit()
 
-        socketio.emit('new_notification', {'user_id': friend.id, 'message': f"{current_user.username} sent you a friend request.", 'friend_request_id': new_friend_request.id}, namespace='/')
-        
-        flash('Friend request sent successfully!', 'success')
+            socketio.emit('new_notification', {'user_id': friend.id, 'message': f"{current_user.username} sent you a friend request.", 'friend_request_id': new_friend_request.id}, namespace='/')
+            
+            flash('Friend request sent successfully!', 'success')
     else:
         flash('User not found', 'danger')
     return redirect(url_for('home'))
@@ -79,7 +83,20 @@ def accept_friend(request_id):
         new_friend_reverse = Friend(user_id=friend_request.sender_id, friend_id=current_user.id)
         db.session.add(new_friend)
         db.session.add(new_friend_reverse)
+
+        Notification.query.filter_by(friend_request_id=friend_request.id).delete()
+        
+        notification = Notification(user_id=friend_request.sender_id, message=f"{current_user.username} accepted your friend request.")
+        db.session.add(notification)
         db.session.commit()
+
+        socketio.emit('new_notification', {
+            'user_id': friend_request.sender_id,
+            'message': f"{current_user.username} accepted your friend request.",
+            'notification_id': notification.id,
+            'friend_request_id': None
+        }, namespace='/')
+        
         flash('Friend request accepted!', 'success')
     else:
         flash('You are not authorized to accept this friend request.', 'danger')
@@ -91,10 +108,25 @@ def decline_friend(request_id):
     friend_request = FriendRequest.query.get_or_404(request_id)
     if friend_request.receiver_id == current_user.id:
         friend_request.status = 'rejected'
+        
+        Notification.query.filter_by(friend_request_id=friend_request.id).delete()
+        
         db.session.commit()
         flash('Friend request declined.', 'success')
     else:
         flash('You are not authorized to decline this friend request.', 'danger')
+    return redirect(url_for('home'))
+
+@app.route("/dismiss_notification/<int:notification_id>", methods=['POST'])
+@login_required
+def dismiss_notification(notification_id):
+    notification = Notification.query.get_or_404(notification_id)
+    if notification.user_id == current_user.id:
+        db.session.delete(notification)
+        db.session.commit()
+        flash('Notification dismissed.', 'success')
+    else:
+        flash('You are not authorized to dismiss this notification.', 'danger')
     return redirect(url_for('home'))
 
 @app.route("/chat/<int:friend_id>", methods=['GET', 'POST'])
@@ -115,15 +147,15 @@ def chat(friend_id):
 
 @socketio.on('join')
 def handle_join(data):
-    username = data['username']
-    room = data['room']
+    username = data.get('username', 'Unknown')
+    room = data.get('room', 'Unknown')
     join_room(room)
     send({'message': f'{username} has entered the room.', 'username': 'System'}, to=room)
 
 @socketio.on('leave')
 def handle_leave(data):
-    username = data['username']
-    room = data['room']
+    username = data.get('username', 'Unknown')
+    room = data.get('room', 'Unknown')
     leave_room(room)
     send({'message': f'{username} has left the room.', 'username': 'System'}, to=room)
 

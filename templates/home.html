@@ -111,11 +111,15 @@
             <h5 class="card-title">Notifications</h5>
             <ul id="notification-list" class="notifications">
                 {% for notification in notifications %}
-                    <li>{{ notification.message }} 
-                        <form method="POST" action="{{ url_for('accept_friend', request_id=notification.friend_request_id) }}" style="display:inline;">
-                            <button type="submit" class="btn btn-success btn-sm">Accept</button>
+                    <li id="notification-{{ notification.id }}">{{ notification.message }}
+                        {% if notification.friend_request_id and notification.user_id == current_user.id %}
+                            <form method="POST" action="{{ url_for('accept_friend', request_id=notification.friend_request_id) }}" style="display:inline;">
+                                <button type="submit" class="btn btn-success btn-sm">Accept</button>
+                            </form>
+                        {% endif %}
+                        <form method="POST" action="{{ url_for('dismiss_notification', notification_id=notification.id) }}" style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary">Dismiss</button>
                         </form>
-                        <button onclick="removeNotification(this)" class="btn btn-sm btn-outline-secondary">Dismiss</button>
                     </li>
                 {% endfor %}
             </ul>
@@ -154,14 +158,25 @@
                 if (data.user_id === currentUserId) {
                     var notificationList = document.getElementById('notification-list');
                     var newNotification = document.createElement('li');
-                    newNotification.innerHTML = `${data.message} <form method="POST" action="/accept_friend/${data.friend_request_id}" style="display:inline;"><button type="submit" class="btn btn-success btn-sm">Accept</button></form> <button onclick="removeNotification(this)" class="btn btn-sm btn-outline-secondary">Dismiss</button>`;
+                    newNotification.setAttribute('id', 'notification-' + data.notification_id);
+                    var acceptButton = data.friend_request_id ? `<form method="POST" action="/accept_friend/${data.friend_request_id}" style="display:inline;"><button type="submit" class="btn btn-success btn-sm">Accept</button></form>` : '';
+                    newNotification.innerHTML = `${data.message} ${acceptButton} <form method="POST" action="/dismiss_notification/${data.notification_id}" style="display:inline;"><button type="submit" class="btn btn-sm btn-outline-secondary">Dismiss</button></form>`;
                     notificationList.appendChild(newNotification);
                 }
             });
         });
 
         function removeNotification(button) {
-            button.parentElement.remove();
+            var notificationElement = button.closest('li');
+            if (notificationElement) {
+                var notificationId = notificationElement.id.split('-')[1];
+                fetch(`/dismiss_notification/${notificationId}`, { method: 'POST' })
+                    .then(response => {
+                        if (response.ok) {
+                            notificationElement.remove();
+                        }
+                    });
+            }
         }
     </script>
 

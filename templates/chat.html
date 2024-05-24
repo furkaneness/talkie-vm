@@ -75,9 +75,11 @@
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
     <script type="text/javascript" charset="utf-8">
         document.addEventListener('DOMContentLoaded', (event) => {
-            var socket = io('http://34.133.139.41:5000');  // Yerel IP adresi
+            var socket = io();
             var room = "{{ room }}";
-            socket.emit('join', {username: "{{ current_user.username }}", room: room});
+            var username = "{{ current_user.username }}";
+
+            socket.emit('join', {username: username, room: room});
 
             socket.on('message', function(data) {
                 var li = document.createElement('li');
@@ -91,7 +93,7 @@
                 if (message.trim() !== '') {
                     socket.emit('message', {
                         message: message, 
-                        username: "{{ current_user.username }}", 
+                        username: username, 
                         room: room,
                         timestamp: new Date().toLocaleTimeString()
                     });
@@ -100,7 +102,7 @@
             });
 
             window.addEventListener('beforeunload', function() {
-                socket.emit('leave', {username: "{{ current_user.username }}", room: room});
+                socket.emit('leave', {username: username, room: room});
             });
         });
     </script>
