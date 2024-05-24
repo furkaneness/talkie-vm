@@ -1,6 +1,6 @@
 from flask import render_template, url_for, flash, redirect, request
 from app import app, db, bcrypt, socketio
-from models import User, Friend, Message, Notification, FriendRequest  # Notification modelini ekliyoruz
+from models import User, Friend, Message, Notification, FriendRequest
 from flask_login import login_user, current_user, logout_user, login_required
 from forms import RegistrationForm, LoginForm
 from flask_socketio import send, emit, join_room, leave_room
@@ -54,17 +54,14 @@ def add_friend():
     friend_email = request.form.get('email')
     friend = User.query.filter_by(email=friend_email).first()
     if friend:
-        # Yeni arkadaş isteği ekle
         new_friend_request = FriendRequest(sender_id=current_user.id, receiver_id=friend.id, status='pending')
         db.session.add(new_friend_request)
         db.session.commit()
 
-        # Bildirim gönder
         notification = Notification(user_id=friend.id, message=f"{current_user.username} sent you a friend request.", friend_request_id=new_friend_request.id)
         db.session.add(notification)
         db.session.commit()
 
-        # Bildirimi gerçek zamanlı olarak ilet
         socketio.emit('new_notification', {'user_id': friend.id, 'message': f"{current_user.username} sent you a friend request.", 'friend_request_id': new_friend_request.id}, namespace='/')
         
         flash('Friend request sent successfully!', 'success')
@@ -86,6 +83,18 @@ def accept_friend(request_id):
         flash('Friend request accepted!', 'success')
     else:
         flash('You are not authorized to accept this friend request.', 'danger')
+    return redirect(url_for('home'))
+
+@app.route("/decline_friend/<int:request_id>", methods=['POST'])
+@login_required
+def decline_friend(request_id):
+    friend_request = FriendRequest.query.get_or_404(request_id)
+    if friend_request.receiver_id == current_user.id:
+        friend_request.status = 'rejected'
+        db.session.commit()
+        flash('Friend request declined.', 'success')
+    else:
+        flash('You are not authorized to decline this friend request.', 'danger')
     return redirect(url_for('home'))
 
 @app.route("/chat/<int:friend_id>", methods=['GET', 'POST'])
